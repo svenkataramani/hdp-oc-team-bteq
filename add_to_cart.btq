@@ -1,0 +1,45 @@
+
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+.LOGON godaddy3.prod.phx3.gdg/P_BTCH_HadoopImp,P_BTCH_HadoopImp;
+
+
+LOCKING ROW FOR ACCESS SELECT TOP 1 * FROM P_HadoopImp_S.add_to_cart_STG;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO E003;
+
+BEGIN TRANSACTION;
+
+
+INSERT	P_HadoopImp_T.add_to_cart
+(       cart_date, 
+        shopper_id, 
+        vguid, 
+        domain_name, 
+        cart_tld_name
+ )
+SELECT  cart_date, 
+        shopper_id, 
+        vguid, 
+        domain_name, 
+        cart_tld_name
+FROM	P_HadoopImp_S.add_to_cart_STG;
+
+DELETE P_HadoopImp_S.add_to_cart_STG ALL;
+
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+END TRANSACTION;
+
+.LOGOFF
+.QUIT
+     
+.LABEL E003
+
+.LOGOFF
+.QUIT 16 

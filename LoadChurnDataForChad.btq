@@ -1,0 +1,74 @@
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/P_BTCH_HadoopImp,P_BTCH_HadoopImp;
+
+------------------------------------------------------------------------
+-- 001 - Check for data in staging
+------------------------------------------------------------------------
+SELECT TOP 1 * FROM p_arm_import.CH_PROD_RENEW;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO LOAD
+
+
+------------------------------------------------------------------------
+--  002 - Insert data in staging
+------------------------------------------------------------------------
+
+drop table p_arm_import.CH_PROD_RENEW;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+.LABEL LOAD
+create table p_arm_import.CH_PROD_RENEW as(
+SELECT im.shopper_id, im.model_parent, im.model_name, im.score, big.PnL_Line, bill.BillDt, 'H' as prod_type
+FROM P_ARM_Import.models im JOIN
+P_ProductBilling.vtBill bill ON im.shopper_id = bill.ShopAcctId JOIN
+bigreporting.dim_product big ON bill.pfid = big.pf_id
+WHERE im.model_parent = 'productchurn'
+AND bill.BillStsId = 1
+AND im.model_name = 'productchurn_hosting'
+AND big.PnL_Line LIKE ANY ( '%Hosting' , 'Grid')                
+AND bill.BillDt between current_date and current_date +30
+AND im.score between '.4' and '.6'
+group by 1,2,3,4,5,6,7
+union
+SELECT im.shopper_id, im.model_parent, im.model_name, im.score, big.PnL_Line, bill.BillDt, 'WB' as prod_type
+FROM P_ARM_Import.models im JOIN
+P_ProductBilling.vtBill bill ON im.shopper_id = bill.ShopAcctId JOIN
+bigreporting.dim_product big ON bill.pfid = big.pf_id
+WHERE im.model_parent = 'productchurn'
+AND bill.BillStsId = 1
+AND im.model_name = 'productchurn_websitebuilder'
+AND big.PnL_Line LIKE ANY ( 'Website Builder')                
+AND bill.BillDt between current_date and current_date +30
+AND im.score between '.4' and '.6'
+group by 1,2,3,4,5,6,7)
+with data
+primary index(shopper_id);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+collect stats p_arm_import.CH_PROD_RENEW column(shopper_id);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  086 - Good exit
+------------------------------------------------------------------------
+
+.LABEL E086
+.LOGOFF
+.QUIT
+
+
+------------------------------------------------------------------------
+--  E003 - Error exit
+------------------------------------------------------------------------
+     
+.LABEL E003
+.LOGOFF
+.QUIT 16 

@@ -1,0 +1,29 @@
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/doritijr,gambino1;
+
+
+CALL P_ARM_IMPORT.SP_FREE_TRIAL_RSRS_EXP_DT();
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  086 - Good exit
+------------------------------------------------------------------------
+
+.LABEL E086
+.LOGOFF
+.QUIT
+
+
+------------------------------------------------------------------------
+--  E003 - Error exit
+------------------------------------------------------------------------
+     
+.LABEL E003
+.LOGOFF
+.QUIT 16 

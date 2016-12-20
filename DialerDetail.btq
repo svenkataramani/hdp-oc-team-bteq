@@ -1,0 +1,231 @@
+/************************************************************************ 
+**
+**        NAME:  vsDialerDetail-Daily.btq
+**
+**      INPUTS:  P_HadoopImp.vsDialerDetail_STG
+**
+**     OUTPUTS:  P_HadoopImp.vtDialerDetail
+**               P_HadoopImp.DialerDetail
+**
+**    PROCESS OVERVIEW:
+**       1. Inset new recods
+**       2. Recods will never change, so no updates
+**       3. Delete older records that are out of range
+**
+**
+**     HISTORY:  AUTHOR    	        DATE                DESCRIPTION
+**               MPENNY	      	2015-06-18             Original script
+************************************************************************/
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/P_BTCH_HadoopImp,P_BTCH_HadoopImp;
+
+------------------------------------------------------------------------
+-- 001 - Check for data in staging
+------------------------------------------------------------------------
+SELECT TOP 1 * FROM P_HadoopImp.vsDialerDetail_STG;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO E003;
+
+
+------------------------------------------------------------------------
+--  002 - Insert new records
+------------------------------------------------------------------------
+
+INSERT	P_HadoopImp_T.DialerDetail
+(  
+     recoverykey
+    ,datetime
+    ,timezone
+    ,customertimezone
+    ,dbdatetime
+    ,campaignid
+    ,callresult
+    ,callresultdetail
+    ,callstatuszone1
+    ,callstatuszone2
+    ,queryruleid
+    ,dialinglistid
+    ,phone
+    ,phoneext
+    ,skillgroupskilltargetid
+    ,phoneindex
+    ,phoneid
+    ,zoneindex
+    ,agentperipheralnumber
+    ,peripheralid
+    ,peripheralcallkey
+    ,callduration
+    ,accountnumber
+    ,firstname
+    ,lastname
+    ,callbackphone
+    ,callbackdatetime
+    ,dialingmode
+    ,dialerid
+    ,portnumber
+    ,importruledatetime
+    ,internaluse1
+    ,internaluse2
+    ,internaluse3
+    ,internaluse4
+    ,internaluse5
+    ,internaluse6
+    ,internaluse7
+    ,internaluse8
+    ,internaluse9
+    ,internaluse10
+    ,internaluse11
+    ,futureuseint1
+    ,futureuseint2
+    ,futureuseint3
+    ,futureuseint4
+    ,futureuseint5
+    ,futureuseint6
+    ,futureuseint7
+    ,futureuseint8
+    ,futureusevarchar1
+    ,futureusevarchar2
+    ,futureusevarchar3
+    ,futureusevarchar4
+    ,routercallkey
+    ,callguid
+    ,routercallkeyday
+    ,wrapupdata
+    ,pickuptime
+    ,maxactiveglitchtime
+    ,numofactiveglitches
+    ,validspeechtime
+    ,maxpostspeechsilenceglitchtime
+    ,numofpostspeechsilenceglitches
+    ,silenceperiod
+    ,termtonedetectiontime
+    ,maxzcrstdev
+    ,noisethreshold
+    ,activethreshold
+    ,reservationcallduration
+    ,previewtime
+    ,campaignreportingdatetime
+    ,protocolid
+    ,DelInd
+    ,EtlInsLdId
+    ,EtlUpdLdId
+ )
+SELECT   STG.recoverykey
+        ,STG.datetime
+        ,STG.timezone
+        ,STG.customertimezone
+        ,STG.dbdatetime
+        ,STG.campaignid
+        ,STG.callresult
+        ,STG.callresultdetail
+        ,STG.callstatuszone1
+        ,STG.callstatuszone2
+        ,STG.queryruleid
+        ,STG.dialinglistid
+        ,STG.phone
+        ,STG.phoneext
+        ,STG.skillgroupskilltargetid
+        ,STG.phoneindex
+        ,STG.phoneid
+        ,STG.zoneindex
+        ,STG.agentperipheralnumber
+        ,STG.peripheralid
+        ,STG.peripheralcallkey
+        ,STG.callduration
+        ,STG.accountnumber
+        ,STG.firstname
+        ,STG.lastname
+        ,STG.callbackphone
+        ,STG.callbackdatetime
+        ,STG.dialingmode
+        ,STG.dialerid
+        ,STG.portnumber
+        ,STG.importruledatetime
+        ,STG.internaluse1
+        ,STG.internaluse2
+        ,STG.internaluse3
+        ,STG.internaluse4
+        ,STG.internaluse5
+        ,STG.internaluse6
+        ,STG.internaluse7
+        ,STG.internaluse8
+        ,STG.internaluse9
+        ,STG.internaluse10
+        ,STG.internaluse11
+        ,STG.futureuseint1
+        ,STG.futureuseint2
+        ,STG.futureuseint3
+        ,STG.futureuseint4
+        ,STG.futureuseint5
+        ,STG.futureuseint6
+        ,STG.futureuseint7
+        ,STG.futureuseint8
+        ,STG.futureusevarchar1
+        ,STG.futureusevarchar2
+        ,STG.futureusevarchar3
+        ,STG.futureusevarchar4
+        ,STG.routercallkey
+        ,STG.callguid
+        ,STG.routercallkeyday
+        ,STG.wrapupdata
+        ,STG.pickuptime
+        ,STG.maxactiveglitchtime
+        ,STG.numofactiveglitches
+        ,STG.validspeechtime
+        ,STG.maxpostspeechsilenceglitchtime
+        ,STG.numofpostspeechsilenceglitches
+        ,STG.silenceperiod
+        ,STG.termtonedetectiontime
+        ,STG.maxzcrstdev
+        ,STG.noisethreshold
+        ,STG.activethreshold
+        ,STG.reservationcallduration
+        ,STG.previewtime
+        ,STG.campaignreportingdatetime
+        ,STG.protocolid
+        ,CAST('A' AS CHAR(1)) AS DelInd
+        ,CAST(0 AS INTEGER) AS EtlInsLdId
+        ,CAST(0 AS INTEGER) AS EtlUpdLdId
+FROM    P_HadoopImp.vsDialerDetail_STG AS STG
+LEFT JOIN   P_HadoopImp.vtDialerDetail AS TRG
+ON      STG.recoverykey = TRG.recoverykey       
+WHERE   TRG.recoverykey IS NULL;
+
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+------------------------------------------------------------------------
+--  003 - Remove recods that are out of range
+------------------------------------------------------------------------
+
+DELETE FROM 
+P_HadoopImp_T.DialerDetail
+WHERE dbDateTime < CAST( ( DATE - 60 ) AS VARCHAR(128) );
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+------------------------------------------------------------------------
+--  004 - Flush staging table for next time
+------------------------------------------------------------------------
+/* GOTO Redirect From Section 002A */
+.LABEL S003
+
+DELETE P_HadoopImp.vsDialerDetail_STG;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+.LOGOFF
+.QUIT
+
+     
+.LABEL E003
+
+.LOGOFF
+.QUIT 16 

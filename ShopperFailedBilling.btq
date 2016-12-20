@@ -1,0 +1,239 @@
+/************************************************************************ 
+**
+**        NAME:  vsShopFailBlg-Daily.btq
+**
+**      INPUTS:  P_HadoopImp.vsShopFailBlg_STG
+**
+**     OUTPUTS:  P_HadoopImp.vtShopFailBlg
+**               P_HadoopImp.ShopFailBlg
+**
+**    PROCESS OVERVIEW:
+**       1. Inset new recods
+**       2. Recods will never change, so no updates
+**       3. Delete older records that are out of range
+**
+**
+**     HISTORY:  AUTHOR    	        DATE                DESCRIPTION
+**               MPENNY	      	2015-05-07             Original script
+**               DORITIJR       2016-05-03             Remove Reconciled Billing
+************************************************************************/
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/doritijr,gambino1;
+
+------------------------------------------------------------------------
+-- 001 - Check for data in staging
+------------------------------------------------------------------------
+SELECT TOP 1 * FROM P_HadoopImp.vsShopFailBlg_STG;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO E086
+
+
+------------------------------------------------------------------------
+--  002 - Reset NULLs in LEFT JOIN key column to zeros
+--        We are going use them in the LEFT JOIN below
+------------------------------------------------------------------------
+
+UPDATE P_HadoopImp.vsShopFailBlg_STG SET cpl_id = 0
+WHERE billing_attempt IS NULL;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+------------------------------------------------------------------------
+--  003 - Insert new records
+------------------------------------------------------------------------
+
+INSERT	P_HadoopImp_T.ShopFailBlg
+(  
+     gdsBillResrcHistId
+    ,shopper_id
+    ,date_entered
+    ,order_id
+    ,row_id
+    ,resource_id 
+    ,gdshop_billing_attemptid
+    ,adjusted_price
+    ,gdshop_product_typeid
+    ,cpl_id
+    ,billing_attempt
+    ,response_code
+    ,reason_code
+    ,source
+    ,billing_country_code   
+    ,total
+    ,attempts
+    ,DelInd
+    ,EtlInsLdId
+    ,EtlUpdLdId
+ )
+SELECT DISTINCT
+	     STG.gdsBillResrcHistId
+        ,STG.shopper_id
+        ,STG.date_entered
+        ,STG.order_id
+        ,STG.row_id
+        ,STG.resource_id         
+        ,STG.gdshop_billing_attemptid
+        ,STG.adjusted_price
+        ,STG.gdshop_product_typeid
+        ,STG.cpl_id
+        ,STG.billing_attempt
+        ,STG.response_code
+        ,STG.reason_code        
+        ,STG.source
+        ,STG.billing_country_code   
+        ,STG.total
+        ,STG.attempts     
+        ,CAST('A' AS CHAR(1)) AS DelInd
+        ,CAST(0 AS INTEGER) AS EtlInsLdId
+        ,CAST(0 AS INTEGER) AS EtlUpdLdId
+FROM    P_HadoopImp.vsShopFailBlg_STG AS STG
+LEFT JOIN  P_HadoopImp.vtShopFailBlg AS TRG
+ON      STG.gdsBillResrcHistId = TRG.gdsBillResrcHistId
+		AND STG.cpl_id = TRG.cpl_id
+WHERE   TRG.gdsBillResrcHistId IS NULL;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+------------------------------------------------------------------------
+--  004 - Remove old recods that are out of range
+------------------------------------------------------------------------
+
+DELETE FROM 
+P_HadoopImp_T.ShopFailBlg
+WHERE date_entered < DATE-30;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+------------------------------------------------------------------------
+--  005 - Remove removed records
+------------------------------------------------------------------------
+
+DELETE FROM P_HadoopImp.vtShopFailBlg
+WHERE NOT EXISTS (
+SELECT  STG.gdsBillResrcHistId  
+FROM    P_HadoopImp.vsShopFailBlg_STG AS STG
+JOIN    P_HadoopImp.vtShopFailBlg AS TRG
+ON      STG.gdsBillResrcHistId = TRG.gdsBillResrcHistId
+);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  005a - Remove reconciled billing
+------------------------------------------------------------------------
+
+CREATE MULTISET VOLATILE TABLE GOODORDS AS(
+SELECT ORDER_ID, SHOPPER_ID
+FROM BIGREPORTING.RPTORDERDETAIL
+WHERE CAST(ORDER_DATE AS DATE) >= CURRENT_DATE - 45
+GROUP BY 1, 2)
+WITH DATA
+PRIMARY INDEX(ORDER_ID)
+ON COMMIT PRESERVE ROWS;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS GOODORDS COLUMN(ORDER_ID);
+
+CREATE MULTISET VOLATILE TABLE GOODORDSRSRS AS(
+SELECT A.SHOPPER_ID, A.RESOURCE_ID, A.ORDER_DATE, A.GDS_PRODUCT_TYPEID, B.NAMESPACE
+FROM
+(SELECT B.SHOPPER_ID, A.RESOURCE_ID, A.GDS_PRODUCT_TYPEID, A.ORDER_DATE, RANK() OVER(PARTITION BY B.SHOPPER_ID, A.RESOURCE_ID ORDER BY A.ORDER_DATE DESC) AS ORDDTRNK
+FROM BILLING.GDS_RES_MTM_ORDER A,
+GOODORDS B
+WHERE A.ORDER_ID = B.ORDER_ID
+AND CAST(A.ORDER_DATE AS DATE) >= CURRENT_DATE - 45
+GROUP BY 1,2,3,4) A,
+GODADDY.GDS_PRODUCT_TYPE B
+WHERE ORDDTRNK = 1
+AND A.GDS_PRODUCT_TYPEID = B.GDS_PRODUCT_TYPEID
+GROUP BY 1,2,3,4,5)
+WITH DATA
+PRIMARY INDEX(SHOPPER_ID, RESOURCE_ID, ORDER_DATE)
+ON COMMIT PRESERVE ROWS;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS GOODORDSRSRS COLUMN(SHOPPER_ID, RESOURCE_ID, ORDER_DATE);
+
+CREATE MULTISET VOLATILE TABLE DELORDS AS(
+SELECT G.SHOPPER_ID, CASE WHEN G.NAMESPACE = 'DOMAIN' AND D.BILLINGRESOURCEID IS NOT NULL THEN D.ID ELSE G.RESOURCE_ID END AS RESOURCE_ID, G.ORDER_DATE, G.GDS_PRODUCT_TYPEID, G.NAMESPACE
+FROM
+GOODORDSRSRS G
+LEFT JOIN
+DOMAINS.DOMAININFO D ON G.RESOURCE_ID = D.BILLINGRESOURCEID)
+WITH DATA
+PRIMARY INDEX(SHOPPER_ID, RESOURCE_ID, ORDER_DATE)
+ON COMMIT PRESERVE ROWS;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS DELORDS COLUMN(SHOPPER_ID, RESOURCE_ID, ORDER_DATE);
+COLLECT STATISTICS COLUMN (SHOPPER_ID) ON P_HADOOPIMP_T.SHOPFAILBLG;
+COLLECT STATISTICS COLUMN (SHOPPER_ID ,RESOURCE_ID) ON P_HADOOPIMP_T.SHOPFAILBLG;
+COLLECT STATISTICS COLUMN (DATE_ENTERED) ON P_HADOOPIMP_T.SHOPFAILBLG;
+COLLECT STATISTICS COLUMN (SHOPPER_ID ,RESOURCE_ID) ON DELORDS;
+COLLECT STATISTICS COLUMN (ORDER_DATE) ON DELORDS;
+COLLECT STATISTICS COLUMN (SHOPPER_ID ,DATE_ENTERED,RESOURCE_ID) ON P_HADOOPIMP_T.SHOPFAILBLG;
+
+CREATE MULTISET VOLATILE TABLE DELRECS AS(
+SELECT A.GDSBILLRESRCHISTID, A.SHOPPER_ID, A.RESOURCE_ID
+FROM P_HADOOPIMP_T.SHOPFAILBLG A,
+DELORDS B
+WHERE A.SHOPPER_ID = B.SHOPPER_ID
+AND A.RESOURCE_ID = B.RESOURCE_ID
+AND A.DATE_ENTERED < B.ORDER_DATE
+GROUP BY 1,2,3)
+WITH DATA
+PRIMARY INDEX(GDSBILLRESRCHISTID)
+ON COMMIT PRESERVE ROWS;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS DELRECS COLUMN(GDSBILLRESRCHISTID);
+COLLECT STATS P_HADOOPIMP_T.SHOPFAILBLG COLUMN(GDSBILLRESRCHISTID);
+
+DELETE A
+FROM P_HADOOPIMP_T.SHOPFAILBLG A,
+DELRECS B
+WHERE A.GDSBILLRESRCHISTID = B.GDSBILLRESRCHISTID;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  006 - Flush staging table for next time
+------------------------------------------------------------------------
+
+DELETE P_HadoopImp.vsShopFailBlg_STG;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+------------------------------------------------------------------------
+--  086 - Good exit
+------------------------------------------------------------------------
+
+.LABEL E086
+.LOGOFF
+.QUIT
+
+
+------------------------------------------------------------------------
+--  E003 - Error exit
+------------------------------------------------------------------------
+     
+.LABEL E003
+.LOGOFF
+.QUIT 16 
+
+
+
+

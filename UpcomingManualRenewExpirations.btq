@@ -1,0 +1,99 @@
+/************************************************************************ 
+**
+**        NAME:  UpcomingManualRenewExpirations.btq
+**
+**      INPUTS:  P_HadoopImp.vsDO_FUTR_RSRS_EXP_STG
+**
+**     OUTPUTS:  P_HadoopImp.vtDO_FUTR_RSRS_EXP
+**               P_HadoopImp_T.DO_FUTR_RSRS_EXP
+**
+**    PROCESS OVERVIEW:
+**       1. Check for new records in staging
+**       2. Normalize expiration_date in staging
+**       3. Delete old data in P_HadoopImp_T.DO_FUTR_RSRS_EXP
+**       4. Insert new data in P_HadoopImp_T.DO_FUTR_RSRS_EXP
+**
+**
+**     HISTORY:  AUTHOR    	        DATE                DESCRIPTION
+**               DORITIJR      	  2015-11-04            Original script
+************************************************************************/
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/P_BTCH_HadoopImp,P_BTCH_HadoopImp;
+
+------------------------------------------------------------------------
+-- 001 - Check for data in staging
+------------------------------------------------------------------------
+SELECT TOP 1 * FROM P_HadoopImp.vsShopMnlRenew_STG;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO E086
+
+
+------------------------------------------------------------------------
+--  002 - Insert data in staging
+------------------------------------------------------------------------
+
+drop table P_HadoopImp_S.ShopMnlRenew_stg;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+create multiset table P_HadoopImp_S.ShopMnlRenew_stg as(
+select shopacctid as ShopAcctId, rsrsid as Resource_ID, ExprtnDt as Expiration_Date
+from P_ProductBilling.vtBill
+where BillStsId = 1
+and ExprtnDt between (date + 1) and (date + 100)
+and ((AutoRenwFlg = 0 or AutoRenwFlg is null) or (AutoRenwFlg = 1 and PmtPrflShopAcctId is null))
+group by 1,2,3)
+with data
+primary index(shopacctid);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS P_HADOOPIMP_S.ShopMnlRenew_STG COLUMN(SHOPACCTID);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+------------------------------------------------------------------------
+--  003 - Delete old data in P_HadoopImp_T.ShopMnlRenew
+------------------------------------------------------------------------
+
+DELETE P_HADOOPIMP_T.ShopMnlRenew ALL;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  003 - Insert new data in P_HadoopImp_T.ShopMnlRenew
+------------------------------------------------------------------------
+
+INSERT INTO P_HADOOPIMP_T.ShopMnlRenew
+SELECT SHOPACCTID, RESOURCE_ID, EXPIRATION_DATE
+FROM P_HADOOPIMP.VSShopMnlRenew_STG
+GROUP BY 1,2,3;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS P_HADOOPIMP_T.ShopMnlRenew COLUMN(SHOPACCTID);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  086 - Good exit
+------------------------------------------------------------------------
+
+.LABEL E086
+.LOGOFF
+.QUIT
+
+
+------------------------------------------------------------------------
+--  E003 - Error exit
+------------------------------------------------------------------------
+     
+.LABEL E003
+.LOGOFF
+.QUIT 16 

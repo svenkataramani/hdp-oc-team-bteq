@@ -1,0 +1,55 @@
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/P_BTCH_HadoopImp,P_BTCH_HadoopImp;
+
+--.LOGON godaddy3.prod.phx3.gdg/bsherman,GoDaddy33;
+
+SELECT TOP 1 * FROM P_HadoopImp_S.shopperdelegation_STG;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO E086
+
+drop table P_ARM_IMPORT.shopperdelegation;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+create multiset table P_ARM_IMPORT.shopperdelegation as(
+SELECT 
+shopper_id,
+grantee_shopper_id,
+delegationlevelid,
+isactive,
+createdate,
+modifydate
+FROM P_HadoopImp_S.shopperdelegation_STG)
+with data
+primary index(shopper_id);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS P_ARM_IMPORT.shopperdelegation COLUMN(shopper_id);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+DELETE P_HadoopImp_S.shopperdelegation_STG ALL;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  086 - Good exit
+------------------------------------------------------------------------
+
+.LABEL E086
+.LOGOFF
+.QUIT
+
+
+------------------------------------------------------------------------
+--  E003 - Error exit
+------------------------------------------------------------------------
+     
+.LABEL E003
+.LOGOFF
+.QUIT 16 

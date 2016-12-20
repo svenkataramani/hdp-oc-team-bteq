@@ -1,0 +1,41 @@
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/doritijr,gambino1;
+
+DELETE P_ARM_IMPORT.FREEPRODFLG ALL;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+INSERT INTO P_ARM_IMPORT.FREEPRODFLG
+SELECT SHOPACCTID, PFID, FREEPRODFLG
+FROM P_ARM_VIEWS.VFPRODOWNRENW
+GROUP BY 1,2,3;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS P_ARM_IMPORT.FREEPRODFLG COLUMN(SHOPACCTID);
+COLLECT STATS P_ARM_IMPORT.FREEPRODFLG COLUMN(PFID);
+COLLECT STATS P_ARM_IMPORT.FREEPRODFLG COLUMN(SHOPACCTID,PFID);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  086 - Good exit
+------------------------------------------------------------------------
+
+.LABEL E086
+.LOGOFF
+.QUIT
+
+
+------------------------------------------------------------------------
+--  E003 - Error exit
+------------------------------------------------------------------------
+     
+.LABEL E003
+.LOGOFF
+.QUIT 16 

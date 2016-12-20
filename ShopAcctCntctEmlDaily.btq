@@ -1,0 +1,84 @@
+/************************************************************************ 
+**
+**        NAME:  ShopAcctCntctEml-Hourly3.btq
+**
+**      INPUTS:  P_HadoopImp.vsShopAcctCntctEml_STG
+**
+**     OUTPUTS:  P_HadoopImp.vtShopAcctCntctEml
+**
+**     HISTORY:  AUTHOR    	        DATE                DESCRIPTION
+**               MZWOLAK	      	2014-07-16.01       Original script
+**               BMOSLEY            2015-05-14.02       Created to Load GD3 in Parallel
+************************************************************************/
+
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+.LOGON godaddy3.prod.phx3.gdg/P_BTCH_HadoopImp,P_BTCH_HadoopImp
+
+LOCKING ROW FOR ACCESS SELECT TOP 1 * FROM P_HadoopImp_S.ShopAcctCntctEml_STG;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO E003;
+
+BEGIN TRANSACTION;
+
+DELETE P_HadoopImp_T.ShopAcctCntctEml ALL;
+
+INSERT	P_HadoopImp_T.ShopAcctCntctEml
+(   ShopAcctId
+    ,CustMapId
+    ,EmlId
+    ,SentDt
+    ,SentDtTm
+    ,PrivlblId
+    ,IscCd
+    ,EmlSrcId
+    ,EmlSrcKey
+    ,TemplId
+    ,MsgId
+    ,BtchId
+    ,ErrCdId
+    ,EmlFrMt
+    ,Lang
+    ,AudCrtDtTm
+    ,DelInd
+    ,EtlInsLdId
+    ,EtlUpdLdId
+ )
+SELECT  ShopAcctId
+        ,CustMapId
+        ,EmlId
+        ,SentDt
+        ,SentDtTm
+        ,PrivlblId
+        ,IscCd
+        ,EmlSrcId
+        ,EmlSrcKey
+        ,TemplId
+        ,MsgId
+        ,BtchId
+        ,ErrCdId
+        ,EmlFrMt
+        ,Lang
+        ,CAST(AudCrtDtTm AS TIMESTAMP(3) FORMAT 'YYYY-MM-DDBHH:MI:SS.S(3)')
+        ,'A'
+        ,0
+        ,0
+FROM	P_HadoopImp_S.ShopAcctCntctEml_STG;
+
+DELETE P_HadoopImp_S.ShopAcctCntctEml_STG ALL;
+
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+
+END TRANSACTION;
+
+.LOGOFF
+.QUIT
+     
+.LABEL E003
+
+.LOGOFF
+.QUIT 16 

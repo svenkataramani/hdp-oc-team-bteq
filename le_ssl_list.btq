@@ -1,0 +1,63 @@
+.SET ECHOREQ ON
+.SET ERROROUT STDOUT
+.SET WIDTH 256
+
+
+.LOGON godaddy3.prod.phx3.gdg/P_BTCH_HadoopImp,P_BTCH_HadoopImp;
+
+--.LOGON godaddy3.prod.phx3.gdg/bsherman,GoDaddy33;
+
+SELECT TOP 1 * FROM P_HadoopImp_S.le_ssl_list_STG;
+
+.IF ACTIVITYCOUNT = 0 THEN .GOTO E086
+
+drop table P_ARM_IMPORT.le_ssl_list;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+create multiset table P_ARM_IMPORT.le_ssl_list as(
+SELECT 
+ct_subdomain,
+issuer_cn,
+cl_subdomain,
+ct_exp_date,
+ct_issue_date,
+gd_subdomain,
+gd_issue_date,
+gd_exp_date,
+cancel_date,
+order_id,
+row_id,
+shopper_id,
+originallistprice
+
+FROM P_HadoopImp_S.le_ssl_list_STG)
+with data
+primary index(subdomain);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+COLLECT STATS P_ARM_IMPORT.le_ssl_list COLUMN(subdomain);
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+DELETE P_HadoopImp_S.le_ssl_list_STG ALL;
+
+.IF ERRORCODE <> 0 THEN .GOTO E003
+
+------------------------------------------------------------------------
+--  086 - Good exit
+------------------------------------------------------------------------
+
+.LABEL E086
+.LOGOFF
+.QUIT
+
+
+------------------------------------------------------------------------
+--  E003 - Error exit
+------------------------------------------------------------------------
+     
+.LABEL E003
+.LOGOFF
+.QUIT 16 
